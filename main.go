@@ -49,6 +49,10 @@ type Interest struct {
 type EmailParam struct {
 	Email string `uri:"email" validate:"required,email"`
 }
+type UpdateParam struct {
+	ID    int64  `uri:"id" validate:"required"`
+	Email string `uri:"email" validate:"required,email"`
+}
 
 var (
 	allInterests = []Interest{
@@ -129,6 +133,7 @@ func main() {
 
 	//Getting all the users
 	server.GET("users", func(context *gin.Context) {
+
 		context.JSON(http.StatusOK, map[string]interface{}{
 			"users": users,
 		})
@@ -158,7 +163,7 @@ func main() {
 		var birthday Birthday
 		err = context.ShouldBindJSON(&birthday)
 		if err != nil {
-			log.Println("Error while creating the user")
+			log.Println("Error while adding the birthday")
 			context.JSON(http.StatusBadRequest, map[string]string{
 				"message": err.Error(),
 			})
@@ -199,6 +204,82 @@ func main() {
 			"message": "Friends birthday added successfully",
 		})
 
+	})
+
+	//Update user friends birthday
+	server.PATCH("/users/:email/birthday/:id", func(context *gin.Context) {
+		// should bind uri with email and id
+		var updateParam UpdateParam
+		err := context.ShouldBindUri(&updateParam)
+		if err != nil {
+			context.JSON(http.StatusBadRequest, gin.H{"msg": err.Error()})
+			return
+		}
+
+		// do field level validations for URI structure
+		err = fieldValidator.Struct(updateParam)
+		if err != nil {
+			log.Println("Error while validating the id and email", err)
+			context.JSON(http.StatusBadRequest, map[string]string{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		// should bind body for birthday body
+		var birthday Birthday
+		err = context.ShouldBindJSON(&birthday)
+		if err != nil {
+			log.Println("Error while updating the birthday", err)
+			context.JSON(http.StatusBadRequest, map[string]string{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		// do field level validations for body structure
+		err = fieldValidator.Struct(birthday)
+		if err != nil {
+			log.Println("Error while validating the birthday", err)
+			context.JSON(http.StatusBadRequest, map[string]string{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		// check if given email is present and if not present throw email not present
+		user, isExits := users[updateParam.Email]
+		if !isExits {
+			context.JSON(http.StatusBadRequest, map[string]string{
+				"message": "Email not present",
+			})
+			return
+		}
+
+		isBirthdayExist := false
+		for i, existingBirthday := range user.FriendsBirthday {
+			if existingBirthday.ID == updateParam.ID {
+				isBirthdayExist = true
+				user.FriendsBirthday[i].FirstName = birthday.FirstName
+				user.FriendsBirthday[i].LastName = birthday.LastName
+				user.FriendsBirthday[i].Gender = birthday.Gender
+				user.FriendsBirthday[i].DateOfBirth = birthday.DateOfBirth
+				user.FriendsBirthday[i].UniqueIdentifier = fmt.Sprintf("%s_%s_%s", birthday.FirstName, birthday.LastName, birthday.Gender)
+				users[user.Email] = user
+				break
+			}
+		}
+
+		if !isBirthdayExist {
+			context.JSON(http.StatusBadRequest, map[string]string{
+				"message": "birthday not found",
+			})
+			return
+		}
+
+		context.JSON(http.StatusBadRequest, map[string]string{
+			"message": "updated successfully",
+		})
 	})
 
 	err := server.Run()
